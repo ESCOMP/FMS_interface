@@ -52,16 +52,17 @@ formatter_class=argparse.ArgumentDefaultsHelpFormatter
 
 def buildlib(bldroot, installpath, caseroot):
 ###############################################################################
-    fv3build = True
+    fv3build = False
     with Case(caseroot, read_only=False) as case:
         srcroot = case.get_value("SRCROOT")
         fms_dir = os.path.join(srcroot,"src","model","FMS")
         if not os.path.isdir(fms_dir):
             fms_dir = os.path.join(srcroot,"libraries","FMS","src")
+            fv3build = True
         expect(os.path.isdir(fms_dir),"ERROR: Could not find FMS source directory")
         if not os.path.isdir(os.path.join(bldroot,"FMS")):
             os.makedirs(os.path.join(bldroot,"FMS"))
-            fv3build = False
+
         filepath = []
         # put src_override directory at head of Filepath to use CESM interface versions of the FMS files.
         filepath.append(os.path.join(fms_dir,"cime","cime_config","src_override"))
@@ -74,10 +75,14 @@ def buildlib(bldroot, installpath, caseroot):
                 fd.write(path+"\n")
         # Tell mkSrcfiles to ignore files beginning in test_
         os.environ["mkSrcfiles_skip_prefix"] = "test_"
+        makefile = os.path.join(fms_dir,"cime","cime_config","Makefile")
+        if not os.path.isfile(makefile):
+            makefile = os.path.join(fms_dir,"cime","cime_config","Makefile.cesm")
+            expect(os.path.isfile(makefile),"Could not find Makefile for FMS build")
         if fv3build:
-            gmake_opts = "install -f {} ".format(os.path.join(fms_dir,"..","cime_config","Makefile"))
+            gmake_opts = "install -f {} ".format(makefile)
         else:
-            gmake_opts = "-f {} ".format(os.path.join(fms_dir,"..","Makefile.cesm"))
+            gmake_opts = "-f {} ".format(makefile)
         gmake_opts += " -C {} ".format(installpath)
         gmake_opts += "CASEROOT={} ".format(caseroot)
         incdir = os.path.join(case.get_value("EXEROOT"),"lib","include")
