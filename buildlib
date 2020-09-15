@@ -9,7 +9,7 @@ _LIBDIR = os.path.join(_CIMEROOT, "scripts", "Tools")
 sys.path.append(_LIBDIR)
 
 from standard_script_setup import *
-from CIME.utils import copyifnewer, run_bld_cmd_ensure_logging, expect
+from CIME.utils import copyifnewer, run_bld_cmd_ensure_logging, expect, symlink_force
 from CIME.case import Case
 from CIME.build import get_standard_makefile_args
 import glob
@@ -50,59 +50,62 @@ formatter_class=argparse.ArgumentDefaultsHelpFormatter
 
     return args.buildroot, args.installpath, args.caseroot
 
-def buildlib(bldroot, installpath, caseroot):
+def buildlib(bldroot, installpath, case):
 ###############################################################################
     fv3build = False
-    with Case(caseroot, read_only=False) as case:
-        srcroot = case.get_value("SRCROOT")
-        fms_dir = os.path.join(srcroot,"src","model","FMS")
-        if not os.path.isdir(fms_dir):
-            fms_dir = os.path.join(srcroot,"libraries","FMS","src")
-            fv3build = True
-        expect(os.path.isdir(fms_dir),"ERROR: Could not find FMS source directory")
-        if not os.path.isdir(os.path.join(bldroot,"FMS")):
-            os.makedirs(os.path.join(bldroot,"FMS"))
+    srcroot = case.get_value("SRCROOT")
+    fms_dir = os.path.join(srcroot,"src","model","FMS")
+    if not os.path.isdir(fms_dir):
+        fms_dir = os.path.join(srcroot,"libraries","FMS","src")
+        fv3build = True
+    expect(os.path.isdir(fms_dir),"ERROR: Could not find FMS source directory")
+    if not os.path.isdir(os.path.join(bldroot,"FMS")):
+        os.makedirs(os.path.join(bldroot,"FMS"))
 
-        filepath = []
-        # put src_override directory at head of Filepath to use CESM interface versions of the FMS files.
-        filepath.append(os.path.join(fms_dir,"cime","cime_config","src_override"))
-        for _dir in glob.iglob(os.path.join(fms_dir,"*")):
-            if os.path.isdir(_dir) and not "cime_config" in _dir:
-                filepath.append(os.path.join(fms_dir, _dir))
-        with open(os.path.join(installpath,"Filepath"), "w") as fd:
-            fd.write(caseroot+"/SourceMods/src.fms\n")
-            for path in filepath:
-                fd.write(path+"\n")
-        # Tell mkSrcfiles to ignore files beginning in test_
-        os.environ["mkSrcfiles_skip_prefix"] = "test_"
-        makefile = os.path.join(fms_dir,"cime","cime_config","Makefile")
-        if not os.path.isfile(makefile):
-            makefile = os.path.join(fms_dir,"cime","cime_config","Makefile.cesm")
-            expect(os.path.isfile(makefile),"Could not find Makefile for FMS build")
-        if fv3build:
-            gmake_opts = "install -f {} ".format(makefile)
-        else:
-            gmake_opts = "-f {} ".format(makefile)
-        gmake_opts += " -C {} ".format(installpath)
-        gmake_opts += "CASEROOT={} ".format(caseroot)
-        incdir = os.path.join(case.get_value("EXEROOT"),"lib","include")
-        gmake_opts += "INCLUDE_DIR={} ".format(incdir)
-        gmake_opts += "USER_INCLDIR=\"-I{} -I{} -I{}\"".format(os.path.join(fms_dir,"include"),
-                                                               os.path.join(fms_dir,"mpp","include"), os.path.join(bldroot,"FMS"))
+    filepath = []
+    # put src_override directory at head of Filepath to use CESM interface versions of the FMS files.
+    filepath.append(os.path.join(fms_dir,"cime","cime_config","src_override"))
+    for _dir in glob.iglob(os.path.join(fms_dir,"*")):
+        if os.path.isdir(_dir) and not "cime_config" in _dir:
+            filepath.append(os.path.join(fms_dir, _dir))
+    caseroot = case.get_value("CASEROOT")
+    with open(os.path.join(bldroot,"Filepath"), "w") as fd:
+        fd.write(caseroot+"/SourceMods/src.fms\n")
+        for path in filepath:
+            fd.write(path+"\n")
+    # Tell mkSrcfiles to ignore files beginning in test_
+    os.environ["mkSrcfiles_skip_prefix"] = "test_"
+    makefile = os.path.join(fms_dir,"cime","cime_config","Makefile")
+    if not os.path.isfile(makefile):
+        makefile = os.path.join(fms_dir,"cime","cime_config","Makefile.cesm")
+        expect(os.path.isfile(makefile),"Could not find Makefile for FMS build")
+    if fv3build:
+        gmake_opts = "install -f {} ".format(makefile)
+    else:
+        gmake_opts = "-f {} ".format(makefile)
+    gmake_opts += " -C {} ".format(bldroot)
+    gmake_opts += "CASEROOT={} ".format(caseroot)
+    incdir = os.path.join(case.get_value("EXEROOT"),"lib","include")
+    gmake_opts += "INCLUDE_DIR={} ".format(incdir)
+    gmake_opts += "USER_INCLDIR=\"-I{} -I{} -I{}\"".format(os.path.join(fms_dir,"include"),
+                                                           os.path.join(fms_dir,"mpp","include"), os.path.join(bldroot,"FMS"))
 
-        gmake_opts += " COMPLIB=libfms.a "
-        gmake_opts += get_standard_makefile_args(case)
-        gmake_cmd = case.get_value("GMAKE")
-        for inc in glob.iglob(os.path.join(fms_dir,"include","*")):
-            copyifnewer(inc, incdir)
-        # This runs the FMS build
-        cmd = "{} {}".format(gmake_cmd, gmake_opts)
-        run_bld_cmd_ensure_logging(cmd, logger)
-        return 0
+    gmake_opts += " COMPLIB=libfms.a "
+    gmake_opts += get_standard_makefile_args(case)
+    gmake_cmd = case.get_value("GMAKE")
+    for inc in glob.iglob(os.path.join(fms_dir,"include","*")):
+        copyifnewer(inc, incdir)
+    # This runs the FMS build
+    cmd = "{} {}".format(gmake_cmd, gmake_opts)
+    run_bld_cmd_ensure_logging(cmd, logger, from_dir=bldroot)
+    libroot = case.get_value("LIBROOT")
+    symlink_force(os.path.join(bldroot,"libfms.a"), os.path.join(libroot,"libfms.a"))
+    return 0
 
 def _main(argv, documentation):
     bldroot, installpath, caseroot = parse_command_line(argv, documentation)
-    return buildlib(bldroot, installpath, caseroot)
+    with Case(caseroot, read_only=False) as case:
+        return buildlib(bldroot, installpath, case)
 
 
 if (__name__ == "__main__"):
