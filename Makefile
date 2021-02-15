@@ -83,7 +83,7 @@ endif
 
 include $(CASEROOT)/Macros.make
 
-# autopromotion needed for FMS 
+# autopromotion needed for FMS
 FFLAGS += $(FC_AUTO_R8)
 
 # Additional GNU flags needed for FMS
@@ -268,6 +268,9 @@ endif
 touch_filepath:
 	touch Filepath
 
+install: $(COMPLIB)
+	cp $(COMPLIB) $(EXEROOT)/lib/
+
 # Get list of files and build dependency file for all .o files
 #   using perl scripts mkSrcfiles and mkDepends
 # if a source is of form .F90.in strip the .in before creating the list of objects
@@ -344,7 +347,7 @@ endif
 ifdef INCLUDE_DIR
   $(COMPLIB): $(OBJS)
 	$(AR) -r $(COMPLIB) $(OBJS)
-	$(CP) *.$(MOD_SUFFIX) *.h $(INCLUDE_DIR)
+	$(CP) *.$(MOD_SUFFIX) $(INCLUDE_DIR)
 else
   $(COMPLIB): $(OBJS)
 	$(AR) -r $(COMPLIB) $(OBJS)
@@ -366,7 +369,7 @@ endif
 %.F90: %.F90.in
 	$(CIMEROOT)/src/externals/genf90/genf90.pl $< > $@
 
-clean: 
+clean:
 	$(RM) $(EXEROOT)/FMS
 
 # the if-tests prevent DEPS files from being created when they're not needed
