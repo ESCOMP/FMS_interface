@@ -1,3 +1,5 @@
 [submodule "src"]
 	path = src
 	url = https://github.com/ESCOMP/FMS
+        fxtag = dev/ncar_0.0.1
+        fxrequired = 'I:T'
